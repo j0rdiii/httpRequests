@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback } from 'react';
 
 import Places from './components/Places.jsx';
 import Modal from './components/Modal.jsx';
@@ -7,32 +7,22 @@ import logoImg from './assets/logo.png';
 import AvailablePlaces from './components/AvailablePlaces.jsx';
 import { fetchUserPlaces, updateUserPlaces } from './http.js';
 import Error from './components/Error.jsx';
+import { useFetch } from './hooks/useFetch.js';
+
 
 function App() {
   const selectedPlace = useRef();
-
-  const [userPlaces, setUserPlaces] = useState([]);
-  const [isFetching, setIsFetching] = useState(true)
-  const [error, setError] = useState();
 
   const [errorUpdatingPlaces, setErrorUpdatingPlaces] = useState(false)
 
   const [modalIsOpen, setModalIsOpen] = useState(false);
 
-  useEffect(() => {
-    async function fetchPlaces() {
-      setIsFetching(true)
-      try {
-        const places = await fetchUserPlaces();
-        setUserPlaces(places);
-      } catch (error) {
-        setError({message: error.message || 'Failed to fetch user places.'});
-      } 
-      setIsFetching(false);
-    }
-    fetchPlaces();
-  }, []);
-
+  const {
+    isFetching, 
+    error, 
+    fetchedData: userPlaces,
+    setFetchedData: setUserPlaces
+  } = useFetch(fetchUserPlaces, []);
 
   function handleStartRemovePlace(place) {
     setModalIsOpen(true);
@@ -45,23 +35,30 @@ function App() {
 
   async function handleSelectPlace(selectedPlace) {
     setUserPlaces((prevPickedPlaces) => {
-      if (!prevPickedPlaces) {
-        prevPickedPlaces = [];
-      }
-      if (prevPickedPlaces.some((place) => place.id === selectedPlace.id)) {
-        return prevPickedPlaces;
-      }
-      return [selectedPlace, ...prevPickedPlaces];
-    });
+        // Si prevPickedPlaces es null o undefined, lo inicializamos
+        if (!prevPickedPlaces) {
+            prevPickedPlaces = [];
+        }
 
-    try {
-      await updateUserPlaces([selectedPlace, ...userPlaces]);
-    } catch (error) {
-      setUserPlaces(userPlaces);
-      setErrorUpdatingPlaces({
-        message: error.message || 'Failed to update places'});
-    }
-  }
+        // Verificamos si el lugar ya existe para evitar duplicados
+        if (prevPickedPlaces.some((place) => place.id === selectedPlace.id)) {
+            return prevPickedPlaces;
+        }
+
+        // Creamos una lista actualizada con el nuevo lugar
+        const updatedPlaces = [selectedPlace, ...prevPickedPlaces];
+
+        // Actualizamos la API con los lugares actualizados
+        updateUserPlaces(updatedPlaces).catch((error) => {
+            setErrorUpdatingPlaces({
+                message: error.message || 'Failed to update places',
+            });
+        });
+
+        return updatedPlaces;
+    });
+}
+
 
   const handleRemovePlace = useCallback(async function handleRemovePlace() {
     setUserPlaces((prevPickedPlaces) =>
@@ -80,7 +77,7 @@ function App() {
     }
 
     setModalIsOpen(false);
-  }, [userPlaces]);
+  }, [userPlaces, setUserPlaces]);
 
   function handleError() {
     setErrorUpdatingPlaces(null);
@@ -125,7 +122,8 @@ function App() {
           />
         )}
 
-        <AvailablePlaces onSelectPlace={handleSelectPlace} />
+        <AvailablePlaces 
+          onSelectPlace={handleSelectPlace} />
       </main>
     </>
   );
